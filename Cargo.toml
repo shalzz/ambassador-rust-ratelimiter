@@ -1,0 +1,14 @@
+[package]
+name = "ambassador-rust-rate-limiter"
+version = "0.1.0"
+authors = ["Shaleen Jain <shaleen@jain.sh>"]
+edition = "2018"
+build = "build.rs"
+
+[dependencies]
+futures = "0.1.16"
+grpcio = "0.4"
+protobuf = "2.1"
+
+[build-dependencies]
+protoc-grpcio = "^1.0.0"
