@@ -1,40 +1,38 @@
+extern crate grpc;
+
 mod protos;
 
 use std::io::Read;
-use std::sync::Arc;
 use std::{io, thread};
 
 use futures::sync::oneshot;
 use futures::Future;
-use grpcio::{Environment, RpcContext, ServerBuilder, UnarySink};
 
 use protos::ratelimit::{RateLimitRequest, RateLimitResponse};
-use protos::ratelimit_grpc::{RateLimitService};
+use protos::ratelimit_grpc::{RateLimitService, RateLimitServiceServer};
+use grpc::RequestOptions;
+use grpc::SingleResponse;
 
 #[derive(Clone)]
 struct RateLimiter;
 
 impl RateLimitService for RateLimiter {
-
-    fn should_rate_limit(&mut self, ctx: RpcContext,
-                         req: RateLimitRequest, sink: UnarySink<RateLimitResponse>) {
-
+    fn should_rate_limit(&self, ctx: RequestOptions, req: RateLimitRequest)
+        -> SingleResponse<RateLimitResponse> {
+        let res = RateLimitResponse::new();
+        SingleResponse::completed(res)
     }
 }
 
 fn main() {
-    let env = Arc::new(Environment::new(1));
-    let service = protos::ratelimit_grpc::create_rate_limit_service(RateLimiter);
-    let mut server = ServerBuilder::new(env)
-        .register_service(service)
-        .bind("127.0.0.1", 50_051)
-        .build()
-        .unwrap();
-    server.start();
+    let port = 50_051;
+    let service = RateLimitServiceServer::new_service_def(RateLimiter);
+    let mut server = grpc::ServerBuilder::new_plain();
+    server.http.set_port(port);
+    server.add_service(service);
+    let _server = server.build();
 
-    for &(ref host, port) in server.bind_addrs() {
-        println!("listening on {}:{}", host, port);
-    }
+    println!("listening on port {}", port);
 
     let (tx, rx) = oneshot::channel();
     thread::spawn(move || {
@@ -43,5 +41,4 @@ fn main() {
         tx.send(())
     });
     let _ = rx.wait();
-    let _ = server.shutdown().wait();
 }
