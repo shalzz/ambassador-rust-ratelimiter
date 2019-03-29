@@ -12,7 +12,14 @@ use futures::sync::oneshot;
 use futures::Future;
 
 use grpc::{RequestOptions, SingleResponse};
-use protos::ratelimit::{RateLimitRequest, RateLimitResponse, RateLimitResponse_Code};
+use protos::ratelimit::{
+    RateLimit,
+    RateLimit_Unit,
+    RateLimitRequest,
+    RateLimitResponse,
+    RateLimitResponse_Code,
+    RateLimitResponse_DescriptorStatus
+};
 use protos::ratelimit_grpc::RateLimitService;
 
 use ratelimit_meter::{KeyedRateLimiter, LeakyBucket};
@@ -20,6 +27,31 @@ use ratelimit_meter::{KeyedRateLimiter, LeakyBucket};
 #[derive(Clone, Debug)]
 struct RateLimitServiceImpl {
     limiter: Box<KeyedRateLimiter<String, LeakyBucket>>,
+}
+
+impl RateLimitServiceImpl {
+    pub fn create_service<H: RateLimitService + 'static + Send + 'static>(
+        handler: H,
+    ) -> ::grpc::rt::ServerServiceDefinition {
+        //let handler_arc = ::std::sync::Arc::new(Mutex::new(handler));
+        let handler_mutex = Mutex::new(handler);
+        ::grpc::rt::ServerServiceDefinition::new(
+            "/pb.lyft.ratelimit.RateLimitService",
+            vec![::grpc::rt::ServerMethod::new(
+                Arc::new(::grpc::rt::MethodDescriptor {
+                    name: "/pb.lyft.ratelimit.RateLimitService/ShouldRateLimit".to_string(),
+                    streaming: ::grpc::rt::GrpcStreaming::Unary,
+                    req_marshaller: Box::new(::grpc::protobuf::MarshallerProtobuf),
+                    resp_marshaller: Box::new(::grpc::protobuf::MarshallerProtobuf),
+                }),
+                {
+                    ::grpc::rt::MethodHandlerUnary::new(move |o, p| {
+                        handler_mutex.lock().unwrap().should_rate_limit(o, p)
+                    })
+                },
+            )],
+        )
+    }
 }
 
 impl RateLimitService for RateLimitServiceImpl {
@@ -53,33 +85,17 @@ impl RateLimitService for RateLimitServiceImpl {
         };
 
         let mut res = RateLimitResponse::new();
-        res.set_overall_code(code);
-        SingleResponse::completed(res)
-    }
-}
+        let mut ratelimit = RateLimit::new();
+        let mut descriptor_status = RateLimitResponse_DescriptorStatus::new();
 
-impl RateLimitServiceImpl {
-    pub fn create_service<H: RateLimitService + 'static + Send + 'static>(
-        handler: H,
-    ) -> ::grpc::rt::ServerServiceDefinition {
-        //let handler_arc = ::std::sync::Arc::new(Mutex::new(handler));
-        let handler_mutex = Mutex::new(handler);
-        ::grpc::rt::ServerServiceDefinition::new(
-            "/pb.lyft.ratelimit.RateLimitService",
-            vec![::grpc::rt::ServerMethod::new(
-                Arc::new(::grpc::rt::MethodDescriptor {
-                    name: "/pb.lyft.ratelimit.RateLimitService/ShouldRateLimit".to_string(),
-                    streaming: ::grpc::rt::GrpcStreaming::Unary,
-                    req_marshaller: Box::new(::grpc::protobuf::MarshallerProtobuf),
-                    resp_marshaller: Box::new(::grpc::protobuf::MarshallerProtobuf),
-                }),
-                {
-                    ::grpc::rt::MethodHandlerUnary::new(move |o, p| {
-                        handler_mutex.lock().unwrap().should_rate_limit(o, p)
-                    })
-                },
-            )],
-        )
+        ratelimit.set_requests_per_unit(100);
+        ratelimit.set_unit(RateLimit_Unit::SECOND);
+        descriptor_status.set_current_limit(ratelimit);
+        descriptor_status.set_code(code);
+        res.mut_statuses().push(descriptor_status);
+        res.set_overall_code(code);
+
+        SingleResponse::completed(res)
     }
 }
 
@@ -87,8 +103,8 @@ fn main() {
     let port = 50_051;
     let rate_limiter = RateLimitServiceImpl {
         limiter: Box::new(KeyedRateLimiter::<String, LeakyBucket>::new(
-            nonzero!(1u32),
-            Duration::from_secs(5),
+            nonzero!(100u32),
+            Duration::from_secs(1),
         )),
     };
     let service = RateLimitServiceImpl::create_service(rate_limiter);
