@@ -21,12 +21,13 @@ use protos::ratelimit::{
     RateLimitResponse_DescriptorStatus
 };
 use protos::ratelimit_grpc::RateLimitService;
+use protos::ratelimit_grpc::RateLimitServiceServer;
 
 use ratelimit_meter::{KeyedRateLimiter, LeakyBucket};
 
 #[derive(Clone, Debug)]
 struct RateLimitServiceImpl {
-    limiter: Box<KeyedRateLimiter<String, LeakyBucket>>,
+    limiter: Arc<Mutex<KeyedRateLimiter<String, LeakyBucket>>>,
 }
 
 impl RateLimitServiceImpl {
@@ -60,9 +61,10 @@ impl RateLimitService for RateLimitServiceImpl {
         _ctx: RequestOptions,
         req: RateLimitRequest,
     ) -> SingleResponse<RateLimitResponse> {
-        let mut handle = self.limiter.clone();
+        let arc_limiter = self.limiter.clone();
+        let mut handle = arc_limiter.lock().unwrap();
         let mut api_key: String = String::new();
-        let mut user_plan: String = String::from("none");
+        let mut user_plan: String = String::new();
 
         for descriptor in req.get_descriptors() {
             for entry in descriptor.entries.iter() {
@@ -102,13 +104,13 @@ impl RateLimitService for RateLimitServiceImpl {
 fn main() {
     let port = 50_051;
     let rate_limiter = RateLimitServiceImpl {
-        limiter: Box::new(KeyedRateLimiter::<String, LeakyBucket>::new(
+        limiter: Arc::new(Mutex::new(KeyedRateLimiter::<String, LeakyBucket>::new(
             nonzero!(100u32),
             Duration::from_secs(1),
-        )),
+        ))),
     };
-    let service = RateLimitServiceImpl::create_service(rate_limiter);
-    //let service = RateLimitServiceServer::new_service_def(rate_limiter);
+    //let service = RateLimitServiceImpl::create_service(rate_limiter);
+    let service = RateLimitServiceServer::new_service_def(rate_limiter);
     let mut server = grpc::ServerBuilder::new_plain();
     server.http.set_port(port);
     server.add_service(service);
