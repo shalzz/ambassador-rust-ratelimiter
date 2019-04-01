@@ -21,7 +21,6 @@ use protos::ratelimit::{
     RateLimitResponse_DescriptorStatus
 };
 use protos::ratelimit_grpc::RateLimitService;
-use protos::ratelimit_grpc::RateLimitServiceServer;
 
 use ratelimit_meter::{KeyedRateLimiter, LeakyBucket};
 
@@ -31,11 +30,9 @@ struct RateLimitServiceImpl {
 }
 
 impl RateLimitServiceImpl {
-    pub fn create_service<H: RateLimitService + 'static + Send + 'static>(
+    pub fn create_service<H: RateLimitService + 'static + Sync + Send + 'static>(
         handler: H,
     ) -> ::grpc::rt::ServerServiceDefinition {
-        //let handler_arc = ::std::sync::Arc::new(Mutex::new(handler));
-        let handler_mutex = Mutex::new(handler);
         ::grpc::rt::ServerServiceDefinition::new(
             "/pb.lyft.ratelimit.RateLimitService",
             vec![::grpc::rt::ServerMethod::new(
@@ -47,7 +44,7 @@ impl RateLimitServiceImpl {
                 }),
                 {
                     ::grpc::rt::MethodHandlerUnary::new(move |o, p| {
-                        handler_mutex.lock().unwrap().should_rate_limit(o, p)
+                        handler.should_rate_limit(o, p)
                     })
                 },
             )],
@@ -109,8 +106,8 @@ fn main() {
             Duration::from_secs(1),
         ))),
     };
-    //let service = RateLimitServiceImpl::create_service(rate_limiter);
-    let service = RateLimitServiceServer::new_service_def(rate_limiter);
+
+    let service = RateLimitServiceImpl::create_service(rate_limiter);
     let mut server = grpc::ServerBuilder::new_plain();
     server.http.set_port(port);
     server.add_service(service);
