@@ -7,6 +7,7 @@ use std::io::Read;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{io, thread};
+use std::env;
 
 use futures::sync::oneshot;
 use futures::Future;
@@ -77,7 +78,7 @@ impl RateLimitService for RateLimitServiceImpl {
         let code = if user_plan == "paid" {
             match handle.check(api_key) {
                 Ok(()) => RateLimitResponse_Code::OK,
-                Err(e) => RateLimitResponse_Code::OVER_LIMIT,
+                Err(_) => RateLimitResponse_Code::OVER_LIMIT,
             }
         } else {
             RateLimitResponse_Code::OVER_LIMIT
@@ -99,7 +100,11 @@ impl RateLimitService for RateLimitServiceImpl {
 }
 
 fn main() {
-    let port = 50_051;
+    let port = match env::var("PORT") {
+        Ok(val) => val.parse().unwrap(),
+        Err(_)  => 50_051
+    };
+
     let rate_limiter = RateLimitServiceImpl {
         limiter: Arc::new(Mutex::new(KeyedRateLimiter::<String, LeakyBucket>::new(
             nonzero!(100u32),
