@@ -1,12 +1,9 @@
-#[macro_use]
-extern crate nonzero_ext;
-
 mod protos;
 
 use std::env;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
 
 use grpc::{RequestOptions, SingleResponse};
 use protos::ratelimit::{
@@ -17,9 +14,13 @@ use protos::ratelimit_grpc::RateLimitService;
 
 use ratelimit_meter::{KeyedRateLimiter, LeakyBucket};
 
+use env_logger::Env;
+use log::{debug, error, info};
+use nonzero_ext::nonzero;
+
 enum RateLimitPlan {
     Paid = 100,
-    Free = 10
+    Free = 10,
 }
 
 #[derive(Clone, Debug)]
@@ -58,8 +59,14 @@ impl RateLimitService for RateLimitServiceImpl {
         let mut api_key: String = String::new();
         let mut user_plan: String = String::new();
 
+        debug!("Domain: {}", req.get_domain());
+        debug!("DescriptorsCount: {}", req.get_descriptors().len());
+
         for descriptor in req.get_descriptors() {
+            debug!("-- New descriptor -- ");
             for entry in descriptor.entries.iter() {
+                debug!("Descriptor Entry: [{}, {}]", entry.key, entry.value);
+
                 if entry.key == "x-api-key" {
                     api_key = entry.value.clone();
                 }
@@ -104,6 +111,8 @@ impl RateLimitService for RateLimitServiceImpl {
 }
 
 fn main() {
+    env_logger::from_env(Env::default().default_filter_or("info")).init();
+
     let port = match env::var("PORT") {
         Ok(val) => val.parse().unwrap(),
         Err(_) => 50_051,
@@ -126,7 +135,7 @@ fn main() {
     server.add_service(service);
     let _server = server.build();
 
-    println!("listening on port {}", port);
+    info!("listening on port {}", port);
 
     loop {
         thread::park();
