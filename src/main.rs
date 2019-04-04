@@ -3,31 +3,29 @@ extern crate nonzero_ext;
 
 mod protos;
 
-use std::io::Read;
+use std::env;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use std::{io, thread};
-use std::env;
-
-use futures::sync::oneshot;
-use futures::Future;
+use std::thread;
 
 use grpc::{RequestOptions, SingleResponse};
 use protos::ratelimit::{
-    RateLimit,
-    RateLimit_Unit,
-    RateLimitRequest,
-    RateLimitResponse,
-    RateLimitResponse_Code,
-    RateLimitResponse_DescriptorStatus
+    RateLimit, RateLimitRequest, RateLimitResponse, RateLimitResponse_Code,
+    RateLimitResponse_DescriptorStatus, RateLimit_Unit,
 };
 use protos::ratelimit_grpc::RateLimitService;
 
 use ratelimit_meter::{KeyedRateLimiter, LeakyBucket};
 
+enum RateLimitPlan {
+    Paid = 100,
+    Free = 10
+}
+
 #[derive(Clone, Debug)]
 struct RateLimitServiceImpl {
-    limiter: Arc<Mutex<KeyedRateLimiter<String, LeakyBucket>>>,
+    limiter_paid: Arc<Mutex<KeyedRateLimiter<String, LeakyBucket>>>,
+    limiter_free: Arc<Mutex<KeyedRateLimiter<String, LeakyBucket>>>,
 }
 
 impl RateLimitServiceImpl {
@@ -44,9 +42,7 @@ impl RateLimitServiceImpl {
                     resp_marshaller: Box::new(::grpc::protobuf::MarshallerProtobuf),
                 }),
                 {
-                    ::grpc::rt::MethodHandlerUnary::new(move |o, p| {
-                        handler.should_rate_limit(o, p)
-                    })
+                    ::grpc::rt::MethodHandlerUnary::new(move |o, p| handler.should_rate_limit(o, p))
                 },
             )],
         )
@@ -59,8 +55,6 @@ impl RateLimitService for RateLimitServiceImpl {
         _ctx: RequestOptions,
         req: RateLimitRequest,
     ) -> SingleResponse<RateLimitResponse> {
-        let arc_limiter = self.limiter.clone();
-        let mut handle = arc_limiter.lock().unwrap();
         let mut api_key: String = String::new();
         let mut user_plan: String = String::new();
 
@@ -75,23 +69,33 @@ impl RateLimitService for RateLimitServiceImpl {
             }
         }
 
+        let mut ratelimit = RateLimit::new();
+        let mut descriptor_status = RateLimitResponse_DescriptorStatus::new();
+
         let code = if user_plan == "paid" {
-            match handle.check(api_key) {
+            ratelimit.set_requests_per_unit(RateLimitPlan::Paid as u32);
+            ratelimit.set_unit(RateLimit_Unit::SECOND);
+            descriptor_status.set_current_limit(ratelimit);
+            let arc_limiter_paid = self.limiter_paid.clone();
+            let mut handle_paid = arc_limiter_paid.lock().unwrap();
+            match handle_paid.check(api_key) {
                 Ok(()) => RateLimitResponse_Code::OK,
                 Err(_) => RateLimitResponse_Code::OVER_LIMIT,
             }
         } else {
-            RateLimitResponse_Code::OVER_LIMIT
+            ratelimit.set_requests_per_unit(RateLimitPlan::Free as u32);
+            ratelimit.set_unit(RateLimit_Unit::SECOND);
+            descriptor_status.set_current_limit(ratelimit);
+            let arc_limiter_free = self.limiter_free.clone();
+            let mut handle_free = arc_limiter_free.lock().unwrap();
+            match handle_free.check(api_key) {
+                Ok(()) => RateLimitResponse_Code::OK,
+                Err(_) => RateLimitResponse_Code::OVER_LIMIT,
+            }
         };
+        descriptor_status.set_code(code);
 
         let mut res = RateLimitResponse::new();
-        let mut ratelimit = RateLimit::new();
-        let mut descriptor_status = RateLimitResponse_DescriptorStatus::new();
-
-        ratelimit.set_requests_per_unit(100);
-        ratelimit.set_unit(RateLimit_Unit::SECOND);
-        descriptor_status.set_current_limit(ratelimit);
-        descriptor_status.set_code(code);
         res.mut_statuses().push(descriptor_status);
         res.set_overall_code(code);
 
@@ -102,12 +106,16 @@ impl RateLimitService for RateLimitServiceImpl {
 fn main() {
     let port = match env::var("PORT") {
         Ok(val) => val.parse().unwrap(),
-        Err(_)  => 50_051
+        Err(_) => 50_051,
     };
 
     let rate_limiter = RateLimitServiceImpl {
-        limiter: Arc::new(Mutex::new(KeyedRateLimiter::<String, LeakyBucket>::new(
-            nonzero!(100u32),
+        limiter_paid: Arc::new(Mutex::new(KeyedRateLimiter::<String, LeakyBucket>::new(
+            nonzero!(RateLimitPlan::Paid as u32),
+            Duration::from_secs(1),
+        ))),
+        limiter_free: Arc::new(Mutex::new(KeyedRateLimiter::<String, LeakyBucket>::new(
+            nonzero!(RateLimitPlan::Free as u32),
             Duration::from_secs(1),
         ))),
     };
@@ -120,11 +128,7 @@ fn main() {
 
     println!("listening on port {}", port);
 
-    let (tx, rx) = oneshot::channel();
-    thread::spawn(move || {
-        println!("Press ENTER to exit...");
-        let _ = io::stdin().read(&mut [0]).unwrap();
-        tx.send(())
-    });
-    let _ = rx.wait();
+    loop {
+        thread::park();
+    }
 }
