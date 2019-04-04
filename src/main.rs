@@ -67,10 +67,10 @@ impl RateLimitService for RateLimitServiceImpl {
             for entry in descriptor.entries.iter() {
                 debug!("Descriptor Entry: [{}, {}]", entry.key, entry.value);
 
-                if entry.key == "x-api-key" {
+                if entry.key == "xapiheader" {
                     api_key = entry.value.clone();
                 }
-                if entry.key == "x-user-plan" {
+                if entry.key == "xuserheader" {
                     user_plan = entry.value.clone();
                 }
             }
@@ -112,6 +112,7 @@ impl RateLimitService for RateLimitServiceImpl {
 
 fn main() {
     env_logger::from_env(Env::default().default_filter_or("info")).init();
+    debug!("Starting ratelimit service");
 
     let port = match env::var("PORT") {
         Ok(val) => val.parse().unwrap(),
