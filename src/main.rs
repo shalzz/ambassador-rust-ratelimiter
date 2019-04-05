@@ -15,12 +15,12 @@ use protos::ratelimit_grpc::RateLimitService;
 use ratelimit_meter::{KeyedRateLimiter, LeakyBucket};
 
 use env_logger::Env;
-use log::{debug, error, info};
+use log::{debug, info, trace};
 use nonzero_ext::nonzero;
 
 enum RateLimitPlan {
-    Paid = 100,
-    Free = 10,
+    Paid = 1000,
+    Free = 100,
 }
 
 #[derive(Clone, Debug)]
@@ -56,16 +56,16 @@ impl RateLimitService for RateLimitServiceImpl {
         _ctx: RequestOptions,
         req: RateLimitRequest,
     ) -> SingleResponse<RateLimitResponse> {
-        let mut api_key: String = String::new();
-        let mut user_plan: String = String::new();
+        let mut api_key: String = String::from("default");
+        let mut user_plan: String = String::from("free");
 
-        debug!("Domain: {}", req.get_domain());
-        debug!("DescriptorsCount: {}", req.get_descriptors().len());
+        trace!("Domain: {}", req.get_domain());
+        trace!("DescriptorsCount: {}", req.get_descriptors().len());
 
         for descriptor in req.get_descriptors() {
-            debug!("-- New descriptor -- ");
+            trace!("-- New descriptor -- ");
             for entry in descriptor.entries.iter() {
-                debug!("Descriptor Entry: [{}, {}]", entry.key, entry.value);
+                trace!("Descriptor Entry: [{}, {}]", entry.key, entry.value);
 
                 if entry.key == "xapiheader" {
                     api_key = entry.value.clone();
@@ -76,6 +76,7 @@ impl RateLimitService for RateLimitServiceImpl {
             }
         }
 
+        debug!("Got user {} with {} plan", api_key, user_plan);
         let mut ratelimit = RateLimit::new();
         let mut descriptor_status = RateLimitResponse_DescriptorStatus::new();
 
@@ -102,6 +103,10 @@ impl RateLimitService for RateLimitServiceImpl {
         };
         descriptor_status.set_code(code);
 
+        if code == RateLimitResponse_Code::OVER_LIMIT {
+            debug!("Ratelimiting!")
+        }
+
         let mut res = RateLimitResponse::new();
         res.mut_statuses().push(descriptor_status);
         res.set_overall_code(code);
@@ -112,7 +117,7 @@ impl RateLimitService for RateLimitServiceImpl {
 
 fn main() {
     env_logger::from_env(Env::default().default_filter_or("info")).init();
-    debug!("Starting ratelimit service");
+    trace!("Starting ratelimit service");
 
     let port = match env::var("PORT") {
         Ok(val) => val.parse().unwrap(),
