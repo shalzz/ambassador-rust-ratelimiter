@@ -84,7 +84,7 @@ impl RateLimitService for RateLimitServiceImpl {
             ratelimit.set_requests_per_unit(RateLimitPlan::Paid as u32);
             ratelimit.set_unit(RateLimit_Unit::SECOND);
             descriptor_status.set_current_limit(ratelimit);
-            let arc_limiter_paid = self.limiter_paid.clone();
+            let arc_limiter_paid = Arc::clone(&self.limiter_paid);
             let mut handle_paid = arc_limiter_paid.lock().unwrap();
             match handle_paid.check(api_key) {
                 Ok(()) => RateLimitResponse_Code::OK,
@@ -94,7 +94,7 @@ impl RateLimitService for RateLimitServiceImpl {
             ratelimit.set_requests_per_unit(RateLimitPlan::Free as u32);
             ratelimit.set_unit(RateLimit_Unit::SECOND);
             descriptor_status.set_current_limit(ratelimit);
-            let arc_limiter_free = self.limiter_free.clone();
+            let arc_limiter_free = Arc::clone(&self.limiter_free);
             let mut handle_free = arc_limiter_free.lock().unwrap();
             match handle_free.check(api_key) {
                 Ok(()) => RateLimitResponse_Code::OK,
