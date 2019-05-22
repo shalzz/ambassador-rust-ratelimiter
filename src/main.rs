@@ -56,6 +56,7 @@ impl RateLimitService for RateLimitServiceImpl {
         _ctx: RequestOptions,
         req: RateLimitRequest,
     ) -> SingleResponse<RateLimitResponse> {
+        let mut remote_ip: String = String::from("default");
         let mut api_key: String = String::from("default");
         let mut user_plan: String = String::from("free");
 
@@ -67,6 +68,9 @@ impl RateLimitService for RateLimitServiceImpl {
             for entry in descriptor.entries.iter() {
                 trace!("Descriptor Entry: [{}, {}]", entry.key, entry.value);
 
+                if entry.key == "remote_address" {
+                    remote_ip = entry.value.clone();
+                }
                 if entry.key == "xapiheader" {
                     api_key = entry.value.clone();
                 }
@@ -76,7 +80,7 @@ impl RateLimitService for RateLimitServiceImpl {
             }
         }
 
-        debug!("Got user {} with {} plan", api_key, user_plan);
+        debug!("Got user {} with {} plan from ip {}", api_key, user_plan, remote_ip);
         let mut ratelimit = RateLimit::new();
         let mut descriptor_status = RateLimitResponse_DescriptorStatus::new();
 
@@ -86,7 +90,7 @@ impl RateLimitService for RateLimitServiceImpl {
             descriptor_status.set_current_limit(ratelimit);
             let arc_limiter_paid = Arc::clone(&self.limiter_paid);
             let mut handle_paid = arc_limiter_paid.lock().unwrap();
-            match handle_paid.check(api_key) {
+            match handle_paid.check(remote_ip) {
                 Ok(()) => RateLimitResponse_Code::OK,
                 Err(_) => RateLimitResponse_Code::OVER_LIMIT,
             }
@@ -96,7 +100,7 @@ impl RateLimitService for RateLimitServiceImpl {
             descriptor_status.set_current_limit(ratelimit);
             let arc_limiter_free = Arc::clone(&self.limiter_free);
             let mut handle_free = arc_limiter_free.lock().unwrap();
-            match handle_free.check(api_key) {
+            match handle_free.check(remote_ip) {
                 Ok(()) => RateLimitResponse_Code::OK,
                 Err(_) => RateLimitResponse_Code::OVER_LIMIT,
             }
