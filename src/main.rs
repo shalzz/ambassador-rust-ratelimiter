@@ -19,8 +19,8 @@ use log::{debug, info, trace};
 use nonzero_ext::nonzero;
 
 enum RateLimitPlan {
-    Paid = 100,
-    Free = 10,
+    Paid = 200, // allows 100 rps with burst upto 200 rps
+    Free = 20, // allows 10 rps with burst upto 20 rps
 }
 
 #[derive(Clone, Debug)]

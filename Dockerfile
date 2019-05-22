@@ -9,6 +9,14 @@ RUN unzip protoc-3.3.0-linux-x86_64.zip -d protoc3
 RUN mv protoc3/bin/* /usr/local/bin/
 RUN mv protoc3/include/* /usr/local/include/
 
+COPY Cargo.toml ./Cargo.toml
+COPY Cargo.lock ./Cargo.lock
+
+RUN mkdir src && \
+    printf "fn main() {}" > src/main.rs && \
+    printf "fn main() {}" > build.rs && \
+    cargo build --release && \
+    rm src/main.rs build.rs
 COPY ./ ./
 
 RUN cargo build --release
