@@ -19,8 +19,8 @@ use log::{debug, info, trace};
 use nonzero_ext::nonzero;
 
 enum RateLimitPlan {
-    Paid = 1000,
-    Free = 100,
+    Paid = 100,
+    Free = 10,
 }
 
 #[derive(Clone, Debug)]
