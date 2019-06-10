@@ -9,11 +9,4 @@ fn main() {
         rust_protobuf: true, // also generate protobuf messages, not just services
         ..Default::default()
     }).expect("Failed to compile gRPC definitions!");
-
-//  protoc_grpcio::compile_grpc_protos(
-//      &["ratelimit.proto"],
-//      &[proto_root],
-//      &proto_root,
-//      Option::None
-//  ).expect("Failed to compile gRPC definitions!");
 }
