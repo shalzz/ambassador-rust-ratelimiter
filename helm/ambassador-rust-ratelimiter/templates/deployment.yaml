@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ambassador-rust-ratelimiter.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "ambassador-rust-ratelimiter.name" . }}
+    helm.sh/chart: {{ include "ambassador-rust-ratelimiter.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "ambassador-rust-ratelimiter.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "ambassador-rust-ratelimiter.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      imagePullSecrets:
+      {{- range .Values.image.pullSecrets }}
+        - name: {{ . }}
+      {{- end}}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ template "ambassador-rust-ratelimiter.image" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          - name: RUST_LOG
+            value: ambassador_rust_rate_limiter={{ .Values.logLevel }}
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.applicationPort }}
+              protocol: TCP
+#         livenessProbe:
+#           httpGet:
+#             path: /
+#             port: grpc 
+#         readinessProbe:
+#           httpGet:
+#             path: /
+#             port: grpc
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}

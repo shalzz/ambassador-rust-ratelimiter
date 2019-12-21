@@ -1,0 +1,37 @@
+# Default values for ambassador-rust-ratelimiter.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+image:
+  registry: registry.hub.docker.com
+  repository: shalzz/ambassador-ratelimiter
+  tag: 0.3
+  pullPolicy: Always
+
+replicaCount: 1
+
+applicationPort: 50051
+
+logLevel: "debug"
+
+service:
+  type: ClusterIP
+  port: 50051
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

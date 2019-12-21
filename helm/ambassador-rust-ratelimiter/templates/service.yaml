@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ambassador-rust-ratelimiter.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "ambassador-rust-ratelimiter.name" . }}
+    helm.sh/chart: {{ include "ambassador-rust-ratelimiter.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    getambassador.io/config: |
+      ---
+      apiVersion: ambassador/v1
+      kind: RateLimitService
+      name: ratelimit
+      service: {{ template "ambassador-rust-ratelimiter.fullname" . }}:{{ .Values.service.port }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    app.kubernetes.io/name: {{ include "ambassador-rust-ratelimiter.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
