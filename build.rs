@@ -1,6 +1,6 @@
 fn main() {
     let proto_root = "src/protos";
-    println!("cargo:rerun-if-changed={}", proto_root);
+    println!("cargo:rerun-if-changed={}{}", proto_root, "/ratelimit.proto");
 
     protoc_rust_grpc::run(protoc_rust_grpc::Args {
         out_dir: "src/protos",

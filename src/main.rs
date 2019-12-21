@@ -20,10 +20,10 @@ use nonzero_ext::nonzero;
 
 enum RateLimitPlan {
     Paid = 200, // allows 100 rps with burst upto 200 rps
-    Free = 20, // allows 10 rps with burst upto 20 rps
+    Free = 20,  // allows 10 rps with burst upto 20 rps
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct RateLimitServiceImpl {
     limiter_paid: Arc<Mutex<KeyedRateLimiter<String, LeakyBucket>>>,
     limiter_free: Arc<Mutex<KeyedRateLimiter<String, LeakyBucket>>>,
@@ -80,7 +80,10 @@ impl RateLimitService for RateLimitServiceImpl {
             }
         }
 
-        debug!("Got user {} with {} plan from ip {}", api_key, user_plan, remote_ip);
+        debug!(
+            "Got user {} with {} plan from ip {}",
+            api_key, user_plan, remote_ip
+        );
         let mut ratelimit = RateLimit::new();
         let mut descriptor_status = RateLimitResponse_DescriptorStatus::new();
 
