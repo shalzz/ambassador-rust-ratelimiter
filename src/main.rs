@@ -1,13 +1,12 @@
 use std::env;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::Duration;
-
-use ratelimit_meter::{KeyedRateLimiter, LeakyBucket};
 
 use env_logger::Env;
 use log::{debug, info, trace};
 use nonzero_ext::nonzero;
 
+use ratelimit_meter::{KeyedRateLimiter, LeakyBucket};
 use tonic::{transport::Server, Request, Response, Status};
 
 use ratelimit::rate_limit::Unit;
@@ -26,8 +25,8 @@ enum RateLimitPlan {
 
 #[derive(Debug)]
 struct RateLimitServiceImpl {
-    limiter_paid: Arc<Mutex<KeyedRateLimiter<String, LeakyBucket>>>,
-    limiter_free: Arc<Mutex<KeyedRateLimiter<String, LeakyBucket>>>,
+    limiter_paid: Mutex<KeyedRateLimiter<String, LeakyBucket>>,
+    limiter_free: Mutex<KeyedRateLimiter<String, LeakyBucket>>,
 }
 
 #[tonic::async_trait]
@@ -68,16 +67,14 @@ impl RateLimitService for RateLimitServiceImpl {
         let requests_per_unit;
         let code = if user_plan == "paid" {
             requests_per_unit = RateLimitPlan::Paid as u32;
-            let arc_limiter_paid = Arc::clone(&self.limiter_paid);
-            let mut handle_paid = arc_limiter_paid.lock().unwrap();
+            let mut handle_paid = self.limiter_paid.lock().unwrap();
             match handle_paid.check(remote_ip) {
                 Ok(()) => Code::Ok,
                 Err(_) => Code::OverLimit,
             }
         } else {
             requests_per_unit = RateLimitPlan::Free as u32;
-            let arc_limiter_free = Arc::clone(&self.limiter_free);
-            let mut handle_free = arc_limiter_free.lock().unwrap();
+            let mut handle_free = self.limiter_free.lock().unwrap();
             match handle_free.check(remote_ip) {
                 Ok(()) => Code::Ok,
                 Err(_) => Code::OverLimit,
@@ -117,14 +114,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let rate_limiter = RateLimitServiceImpl {
-        limiter_paid: Arc::new(Mutex::new(KeyedRateLimiter::<String, LeakyBucket>::new(
+        limiter_paid: Mutex::new(KeyedRateLimiter::<String, LeakyBucket>::new(
             nonzero!(RateLimitPlan::Paid as u32),
             Duration::from_secs(1),
-        ))),
-        limiter_free: Arc::new(Mutex::new(KeyedRateLimiter::<String, LeakyBucket>::new(
+        )),
+        limiter_free: Mutex::new(KeyedRateLimiter::<String, LeakyBucket>::new(
             nonzero!(RateLimitPlan::Free as u32),
             Duration::from_secs(1),
-        ))),
+        )),
     };
 
     let addr = format!("[::1]:{}", port).parse().unwrap();
