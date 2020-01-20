@@ -6,8 +6,16 @@ edition = "2018"
 build = "build.rs"
 
 [dependencies]
+tonic           = { version = "0.1.0", features = ["tls"] }
+tokio           = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "macros", "uds"] }
+futures         = { version = "0.3", default-features = false, features = ["alloc"] }
+prost           = "0.6"
+async-stream    = "0.2"
+tower           = "0.3"
+
 grpc            = "~0.6"
 protobuf        = "~2"
+
 ratelimit_meter = "~4.1.1"
 nonzero_ext     = "0.1.5"
 log             = "0.4.6"
@@ -15,3 +23,4 @@ env_logger      = "0.6.1"
 
 [build-dependencies]
 protoc-rust-grpc = "0.6.1"
+tonic-build = "0.1.0"
